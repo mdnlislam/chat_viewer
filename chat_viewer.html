@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>respond.io Chat Viewer (বাংলা অনুবাদ সহ)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #1c1e21; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #1f2937; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .stats { font-size: 13px; opacity: .8; }
+  header label.btn { margin-left: auto; background: #3b82f6; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  header input[type=file] { display: none; }
+  main { flex: 1; display: flex; min-height: 0; }
+  aside { width: 320px; background: #fff; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
+  aside .tools { padding: 10px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; gap: 6px; }
+  aside input, aside select { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; }
+  #list { overflow-y: auto; flex: 1; }
+  .item { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+  .item:hover { background: #f5f7fa; }
+  .item.active { background: #e0ecff; }
+  .item .name { font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+  .item .name span { font-weight: 400; font-size: 11px; color: #888; white-space: nowrap; }
+  .item .last { font-size: 12px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  section { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #chatHead { background: #fff; padding: 10px 16px; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #chatHead h2 { margin: 0; font-size: 16px; }
+  #chatHead .meta { font-size: 12px; color: #777; }
+  #chatHead button { margin-left: auto; padding: 6px 10px; border: 1px solid #ccc; background: #fff; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  #chat { flex: 1; overflow-y: auto; padding: 16px; }
+  .day { text-align: center; margin: 14px 0 8px; }
+  .day span { background: #dfe3e8; font-size: 11px; padding: 3px 10px; border-radius: 10px; color: #555; }
+  .msg { display: flex; margin: 4px 0; }
+  .msg.us { justify-content: flex-end; }
+  .bubble { max-width: 70%; padding: 8px 11px; border-radius: 10px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,.06); }
+  .client .bubble { background: #fff; border-top-left-radius: 2px; }
+  .us .bubble { background: #d9fdd3; border-top-right-radius: 2px; }
+  .bubble .who { font-size: 11px; font-weight: 600; margin-bottom: 2px; }
+  .client .who { color: #b45309; } .us .who { color: #047857; }
+  .bubble .time { font-size: 10px; color: #888; text-align: right; margin-top: 3px; }
+  .bubble mark { background: #fde68a; }
+  .media { font-style: italic; color: #888; }
+  .empty { color: #888; text-align: center; margin-top: 80px; font-size: 14px; line-height: 1.6; }
+  #drop { position: fixed; inset: 0; background: rgba(59,130,246,.15); border: 3px dashed #3b82f6; display: none; align-items: center; justify-content: center; font-size: 20px; color: #1d4ed8; z-index: 9; }
+  .tr { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(0,0,0,.18); color: #1e3a8a; font-family: "Noto Sans Bengali", "Hind Siliguri", "SolaimanLipi", Vrinda, system-ui, sans-serif; }
+  .tr.err { color: #b91c1c; font-size: 12px; }
+  .trLink { font-size: 11px; color: #2563eb; cursor: pointer; margin-right: 6px; user-select: none; }
+  .trLink:hover { text-decoration: underline; }
+  .bubble .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; }
+  .bubble .foot .time { margin-top: 0; }
+  #trBtn { background: #2563eb !important; color: #fff; border-color: #2563eb !important; }
+  #trBtn.on { background: #059669 !important; border-color: #059669 !important; }
+  #trStatus { font-size: 12px; color: #2563eb; }
+  @media (max-width: 700px) { aside { width: 42%; } .bubble { max-width: 88%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chat Viewer</h1>
+  <div class="stats" id="stats">No file loaded</div>
+  <label class="btn">Open JSON file<input type="file" id="file" accept=".json,application/json"></label>
+</header>
+<main>
+  <aside>
+    <div class="tools">
+      <input id="search" placeholder="Search client name or message text…">
+      <select id="filter">
+        <option value="all">All clients</option>
+        <option value="replied">Client wrote at least once</option>
+        <option value="unanswered">Last message from client (awaiting reply)</option>
+        <option value="empty">No messages</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </aside>
+  <section>
+    <div id="chatHead" style="display:none">
+      <h2 id="cName"></h2><div class="meta" id="cMeta"></div>
+      <span id="trStatus"></span>
+      <button id="trBtn">বাংলা অনুবাদ (Translate to Bangla)</button>
+      <button id="copyBtn" style="margin-left:0">Copy as text</button>
+      <button id="dlBtn" style="margin-left:0">Download .txt</button>
+    </div>
+    <div id="chat"><div class="empty">Click <b>Open JSON file</b> (or drag &amp; drop<br><code>respondio_all_chats.json</code> here) to view the chats.</div></div>
+  </section>
+</main>
+<div id="drop">Drop the JSON file here</div>
+
+<script>
+let data = null, current = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtDate = iso => iso ? iso.slice(0,10) : '';
+const fmtTime = iso => iso ? iso.slice(11,16) : '';
+const dayLabel = iso => new Date(iso.slice(0,10) + 'T00:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+
+/* ---------- Bangla translation ---------- */
+// Cache translations (saved in this browser so the same message is never translated twice)
+let trCache = {};
+try { trCache = JSON.parse(localStorage.getItem('bn_tr_cache') || '{}'); } catch (e) {}
+const saveCache = () => { try { localStorage.setItem('bn_tr_cache', JSON.stringify(trCache)); } catch (e) {} };
+let showTr = false;           // whole-chat translation mode on/off
+const shownOne = new Set();   // single messages the user translated
+const hiddenOne = new Set();  // single messages hidden while whole-chat mode is on
+const isVisible = id => ((showTr && !hiddenOne.has(id)) || shownOne.has(id)) && !!trCache[id];
+
+const isBangla = t => { const bn = (t.match(/[ঀ-৿]/g) || []).length; const letters = (t.match(/\p{L}/gu) || []).length; return letters > 0 && bn / letters > 0.5; };
+const needsTr = m => m.text && m.text !== '[attachment / media]' && !isBangla(m.text) && /\p{L}/u.test(m.text);
+
+// Engine 1: Chrome's built-in on-device translator (private, Chrome 138+), if available
+const chromeTranslators = {};
+let detector = null;
+async function chromeTranslate(text) {
+  if (!('Translator' in self) || !('LanguageDetector' in self)) throw new Error('no built-in translator');
+  detector = detector || await LanguageDetector.create();
+  const [{ detectedLanguage: src }] = await detector.detect(text);
+  if (!src || src === 'und' || src === 'bn') throw new Error('unknown language');
+  if (!chromeTranslators[src]) {
+    const avail = await Translator.availability({ sourceLanguage: src, targetLanguage: 'bn' });
+    if (avail === 'unavailable') throw new Error('pair unavailable');
+    chromeTranslators[src] = await Translator.create({ sourceLanguage: src, targetLanguage: 'bn' });
+  }
+  return chromeTranslators[src].translate(text);
+}
+
+// Engine 2: Google Translate web endpoint (needs internet)
+async function googleTranslate(text) {
+  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=bn&dt=t&q=' + encodeURIComponent(text.slice(0, 4500));
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return j[0].map(p => p[0]).join('');
+}
+
+let useChrome = true;
+async function translate(m) {
+  if (trCache[m.message_id]) return trCache[m.message_id];
+  let out;
+  if (useChrome) { try { out = await chromeTranslate(m.text); } catch (e) { if (/no built-in/.test(e.message)) useChrome = false; } }
+  if (!out) out = await googleTranslate(m.text);
+  trCache[m.message_id] = out; saveCache();
+  return out;
+}
+
+function trHtml(m) {
+  const t = trCache[m.message_id];
+  return t ? `<div class="tr">${esc(t)}</div>` : '';
+}
+
+async function translateMessages(list, onProgress) {
+  let done = 0, failed = 0, i = 0;
+  const worker = async () => {
+    while (i < list.length) {
+      const m = list[i++];
+      try { await translate(m); } catch (e) { failed++; }
+      done++; onProgress && onProgress(done, list.length, failed);
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  return failed;
+}
+
+async function translateChat() {
+  if (!current) return;
+  const c = current;
+  showTr = true; $('trBtn').classList.add('on'); $('trBtn').textContent = 'অনুবাদ লুকান (Hide Bangla)';
+  const todo = c.messages.filter(m => needsTr(m) && !trCache[m.message_id]);
+  if (todo.length) {
+    const failed = await translateMessages(todo, (d, n) => { if (current === c) $('trStatus').textContent = `অনুবাদ হচ্ছে… ${d}/${n}`; });
+    if (current === c) $('trStatus').textContent = failed ? `${failed}টি বার্তা অনুবাদ হয়নি (internet?)` : '';
+  }
+  if (current === c && showTr) openChat(c, true);
+}
+
+function load(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try { data = JSON.parse(r.result); }
+    catch (e) { alert('Could not read this file as JSON.'); return; }
+    if (!data.clients) { alert('This JSON does not look like the chat export.'); return; }
+    $('stats').textContent = `${data.total_clients} clients · ${data.total_messages} messages · exported ${fmtDate(data.exported_at)}`;
+    renderList();
+    if (data.clients.length) openChat(data.clients[0]);
+  };
+  r.readAsText(file);
+}
+
+function matches(c, q) {
+  if (!q) return true;
+  if (c.name.toLowerCase().includes(q)) return true;
+  return c.messages.some(m => m.text.toLowerCase().includes(q));
+}
+
+function renderList() {
+  const q = $('search').value.trim().toLowerCase(), f = $('filter').value;
+  const items = data.clients.filter(c => {
+    const last = c.messages[c.messages.length - 1];
+    if (f === 'replied' && !c.messages.some(m => m.sender === 'client')) return false;
+    if (f === 'unanswered' && !(last && last.sender === 'client')) return false;
+    if (f === 'empty' && c.message_count) return false;
+    return matches(c, q);
+  });
+  $('list').innerHTML = items.map(c => {
+    const last = c.messages[c.messages.length - 1];
+    const preview = last ? (last.sender === 'us' ? 'You: ' : '') + last.text : 'No messages';
+    return `<div class="item ${current === c ? 'active' : ''}" data-id="${c.contact_id}">
+      <div class="name">${esc(c.name)} <span>${fmtDate(c.last_message_at)}</span></div>
+      <div class="last">${esc(preview.slice(0, 90))}</div></div>`;
+  }).join('') || '<div class="empty">No matches</div>';
+}
+
+function highlight(text, q) {
+  const safe = esc(text);
+  if (!q) return safe;
+  const re = new RegExp(esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  return safe.replace(re, m => `<mark>${m}</mark>`);
+}
+
+function openChat(c, keepScroll) {
+  if (current !== c) { $('trStatus').textContent = ''; }
+  current = c;
+  $('trBtn').classList.toggle('on', showTr);
+  $('trBtn').textContent = showTr ? 'অনুবাদ লুকান (Hide Bangla)' : 'বাংলা অনুবাদ (Translate to Bangla)';
+  const prevScroll = $('chat').scrollTop;
+  const q = $('search').value.trim();
+  $('chatHead').style.display = 'flex';
+  $('cName').textContent = c.name;
+  const fromClient = c.messages.filter(m => m.sender === 'client').length;
+  $('cMeta').textContent = `${c.message_count} messages (${fromClient} client · ${c.message_count - fromClient} us)` +
+    (c.first_message_at ? ` · ${fmtDate(c.first_message_at)} → ${fmtDate(c.last_message_at)}` : '');
+  let html = '', lastDay = '';
+  for (const m of c.messages) {
+    const d = fmtDate(m.timestamp);
+    if (d !== lastDay) { html += `<div class="day"><span>${dayLabel(m.timestamp)}</span></div>`; lastDay = d; }
+    const cls = m.sender === 'client' ? 'client' : 'us';
+    const body = m.text === '[attachment / media]' ? '<span class="media">📎 attachment / media</span>' : highlight(m.text, q);
+    const visible = isVisible(m.message_id);
+    const link = needsTr(m) ? `<span class="trLink" data-mid="${m.message_id}">${visible ? 'মূল লেখা' : 'অনুবাদ'}</span>` : '<span></span>';
+    html += `<div class="msg ${cls}"><div class="bubble"><div class="who">${cls === 'client' ? esc(c.name) : 'Us'}</div>${body}${visible ? trHtml(m) : ''}<div class="foot">${link}<span class="time">${fmtTime(m.timestamp)}</span></div></div></div>`;
+  }
+  $('chat').innerHTML = html || '<div class="empty">This contact has no messages.</div>';
+  $('chat').scrollTop = keepScroll ? prevScroll : $('chat').scrollHeight;
+  renderList();
+}
+
+function asText(c) {
+  return `CLIENT: ${c.name} (contact ${c.contact_id})\n` + c.messages.map(m =>
+    `[${m.timestamp.slice(0,16).replace('T',' ')}] ${m.sender === 'client' ? 'CLIENT' : 'US'}: ${m.text}` +
+    (trCache[m.message_id] ? `\n    (বাংলা): ${trCache[m.message_id]}` : '')).join('\n');
+}
+
+$('trBtn').onclick = () => {
+  if (!current) return;
+  shownOne.clear(); hiddenOne.clear();
+  if (showTr) { showTr = false; $('trStatus').textContent = ''; openChat(current, true); }
+  else translateChat();
+};
+// per-message translate / show original
+$('chat').onclick = async e => {
+  const l = e.target.closest('.trLink'); if (!l) return;
+  const id = l.dataset.mid, m = current.messages.find(x => x.message_id === id);
+  if (isVisible(id)) { shownOne.delete(id); if (showTr) hiddenOne.add(id); openChat(current, true); return; }
+  hiddenOne.delete(id);
+  l.textContent = 'অনুবাদ হচ্ছে…';
+  try { await translate(m); shownOne.add(id); openChat(current, true); }
+  catch (err) { l.textContent = 'অনুবাদ ব্যর্থ — আবার চেষ্টা করুন'; }
+};
+
+$('file').onchange = e => e.target.files[0] && load(e.target.files[0]);
+$('search').oninput = () => data && renderList();
+$('filter').onchange = () => data && renderList();
+$('list').onclick = e => {
+  const el = e.target.closest('.item'); if (!el) return;
+  openChat(data.clients.find(c => c.contact_id === el.dataset.id));
+};
+$('copyBtn').onclick = () => current && navigator.clipboard.writeText(asText(current)).then(() => {
+  $('copyBtn').textContent = 'Copied!'; setTimeout(() => $('copyBtn').textContent = 'Copy as text', 1200);
+});
+$('dlBtn').onclick = () => {
+  if (!current) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([asText(current)], { type: 'text/plain' }));
+  a.download = current.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') + '_chat.txt';
+  a.click();
+};
+// drag & drop
+let dragN = 0;
+addEventListener('dragenter', e => { e.preventDefault(); dragN++; $('drop').style.display = 'flex'; });
+addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; $('drop').style.display = 'none'; } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); dragN = 0; $('drop').style.display = 'none'; const f = e.dataTransfer.files[0]; if (f) load(f); });
+</script>
+</body>
+</html>
